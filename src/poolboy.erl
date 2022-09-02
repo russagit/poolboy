@@ -5,7 +5,8 @@
 
 -export([checkout/1, checkout/2, checkout/3, checkin/2, transaction/2,
          transaction/3, child_spec/2, child_spec/3, start/1, start/2,
-         start_link/1, start_link/2, stop/1, status/1, add_worker/1]).
+         start_link/1, start_link/2, stop/1, status/1, status_ext/1,
+         add_worker/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 -export_type([pool/0]).
@@ -133,6 +134,10 @@ stop(Pool) ->
 status(Pool) ->
     gen_server:call(Pool, status).
 
+-spec status_ext(Pool :: pool()) -> proplists:proplist().
+status_ext(Pool) ->
+    gen_server:call(Pool, status_ext).
+
 -spec add_worker(Pool :: pool()) -> ok.
 add_worker(Pool) ->
     gen_server:cast(Pool, add_worker).
@@ -233,6 +238,18 @@ handle_call(status, _From, State) ->
            overflow = Overflow} = State,
     StateName = state_name(State),
     {reply, {StateName, length(Workers), Overflow, ets:info(Monitors, size)}, State};
+handle_call(status_ext, _From, State) ->
+    #state{workers = Workers,
+        monitors = Monitors,
+        overflow = Overflow,
+        waiting = Queue,
+        supervisor = Sup,
+        last_overflow_ts = LastOvTs} = State,
+    StateName = state_name(State),
+    {reply, [{state, StateName}, {avail_workes_num, length(Workers)},
+        {all_workers_num, length(supervisor:which_children(Sup))},
+        {overflow, Overflow}, {monitors, ets:info(Monitors, size)},
+        {queued, queue:len(Queue)}, {last_overflow_ts, LastOvTs}], State};
 handle_call(get_avail_workers, _From, State) ->
     Workers = State#state.workers,
     {reply, Workers, State};

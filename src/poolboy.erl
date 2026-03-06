@@ -303,12 +303,14 @@ handle_info(overflow_clean,
         overflow = Overflow,
         overflow_ttl = OverflowTtl,
         overflow_clean_timer = Timer,
-        last_overflow_ts = LastTS} = State) ->
+        last_overflow_ts = LastTS,
+        strategy = Strategy} = State) ->
     erlang:cancel_timer(Timer),
     case erlang:system_time(millisecond) - LastTS > OverflowTtl of
         true when length(Workers) >= Overflow ->
-            NewWorkers = dismiss_workers(Overflow, Sup, Workers),
-            {noreply, State#state{workers = NewWorkers, overflow = 0, overflow_clean_timer = undefined}};
+            NewWorkers = dismiss_workers(Overflow, Sup, get_workers_strategy(Workers, Strategy)),
+            {noreply, State#state{workers = get_workers_strategy(NewWorkers, Strategy),
+                overflow = 0, overflow_clean_timer = undefined}};
         _ ->
             Timer2 = erlang:send_after(OverflowTtl, self(), overflow_clean),
             {noreply, State#state{overflow_clean_timer = Timer2}}
@@ -342,6 +344,11 @@ new_worker(Sup, FromPid) ->
     Pid = new_worker(Sup),
     Ref = erlang:monitor(process, FromPid),
     {Pid, Ref}.
+
+get_workers_strategy(Workers, lifo = _Strategy) ->
+    lists:reverse(Workers);
+get_workers_strategy(Workers, _Strategy) ->
+    Workers.
 
 dismiss_workers(0, _Sup, Workers) ->
     Workers;
